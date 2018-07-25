@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: Template
+labels:
+  template: kafka-autocluster
+metadata:
+  annotations:
+    description: Kafka StatefulSet Cluster on namespace openshift and Runtime Components
+    iconClass: icon-erlang
+    tags: erlang,kafka
+  creationTimestamp: 2018-05-16T07:02:54Z
+  name: kafka-autocluster
+  namespace: openshift
+  resourceVersion: "25933267"
+  selfLink: /oapi/v1/namespaces/openshift/templates/kafka-autocluster
+  uid: 27decf2e-58d7-11e8-9d8b-005056aa11ea
+objects:
+- apiVersion: v1
+  kind: RoleBinding
+  metadata:
+    labels:
+      application: ${APPLICATION_NAME}
+    name: view-autocluster
+  roleRef:
+    name: view-autocluster
+  subjects:
+  - kind: ServiceAccount
+    name: default
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      application: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+  spec:
+    clusterIP: None
+    ports:
+    - name: 9092-tcp
+      port: 9092
+      protocol: TCP
+      targetPort: 9092
+    - name: 2181-tcp
+      port: 2181
+      protocol: TCP
+      targetPort: 2181
+    selector:
+      application: ${APPLICATION_NAME}
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: apps/v1beta1
+  kind: StatefulSet
+  metadata:
+    labels:
+      application: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+  spec:
+    replicas: ${KAFKA_NODE_COUNT}
+    selector:
+      matchLabels:
+        application: ${APPLICATION_NAME}
+    serviceName: ${APPLICATION_NAME}
+    template:
+      metadata:
+        labels:
+          application: ${APPLICATION_NAME}
+      spec:
+        containers:
+        - env:
+          - name: AUTOCLUSTER_DELAY
+            value: "10"
+          - name: AUTOCLUSTER_TYPE
+            value: k8s
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          - name: KAFKA_SERVER_NAME
+            value: ${APPLICATION_NAME}.${namespace}.svc.cluster.local
+          - name: KAFKA_REPLICAS_NUM
+            value: ${KAFKA_NODE_COUNT}
+          - name: KAFKA_POD_NAME
+            value: ${MY_POD_NAME}
+          - name: AUTOCLUSTER_TYPE
+            value: k8s
+          - name: AUTOCLUSTER_DELAY
+            value: "10"
+          - name: AUTOCLUSTER_CLEANUP
+            value: "true"
+          - name: CLEANUP_WARN_ONLY
+            value: "false"
+          - name: K8S_ADDRESS_TYPE
+            value: hostname
+          - name: OPENSHIFT_HOSTNAME_SUFFIX
+            value: .$(KAFKA_SERVICE_NAME)
+          image: xichang/kafka:autocluster
+          imagePullPolicy: Always
+          name: ${APPLICATION_NAME}
+          ports:
+          - containerPort: 9092
+            protocol: TCP
+          - containerPort: 2181
+            protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /var/lib/kafka/mnesia
+            name: mnesia
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        terminationGracePeriodSeconds: 10
+    volumeClaimTemplates:
+    - metadata:
+        annotations:
+          volume.beta.kubernetes.io/storage-class: gluster-dyn-customer
+        name: mnesia
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+parameters:
+- description: The name for the application.
+  name: APPLICATION_NAME
+  required: true
+  value: kafka
+- description: The count for kafka cluster count,Suggested use 3
+  name: KAFKA_NODE_COUNT
+  required: true
+  value: "3"
+- description: The name for the project namespace
+  name: namespace
+  required: true
+- description: Kafka version to build
+  name: KAFKA_VERSION
+  required: true
+  value: 2.11.0
